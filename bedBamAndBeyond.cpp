@@ -6,14 +6,21 @@
  */
 
 #include <iostream>
+#include <stdlib.h>
 #include <fstream>
 #include <gzstream.h>
 #include <setjmp.h>
+
+#include "api/BamMultiReader.h"
+#include "api/BamReader.h"
+#include "api/BamWriter.h"
+#include "api/BamAux.h"
 
 #include "hpdf.h"
 #include "utils.h"
 
 using namespace std;
+using namespace BamTools;
 
 jmp_buf env;
 
@@ -76,12 +83,53 @@ typedef struct{
     unsigned int length;
 } chrinfo;
 
+typedef struct{
+    double  y;
+    double  length;
+    double  lengthScreen;
+} chrScreenInfo;
+
+inline void addRange(HPDF_Page & page,double begin,double end, const chrScreenInfo & chrInfToUse ){
+    draw_Simplerect (page, 
+		     10+ chrInfToUse.lengthScreen*(begin/chrInfToUse.length ),
+		     chrInfToUse.y,
+		     chrInfToUse.lengthScreen * ((end-begin)/chrInfToUse.length) );			     
+    // cout<<line<<endl;
+    HPDF_Page_Fill (page);
+}
+
+bool isBAM(string filename){
+    bool isBAMfile=true;
+    //HPDF_Page_SetAlphaFill (page, 0.75);
+    igzstream testFILE;
+
+    testFILE.open(filename.c_str(), ios::in);
+    if (testFILE.good()){
+	const string magicNumber="BAM\1";
+	unsigned char  stringHeader [4];
+	const unsigned int     lengthHeader  = 4;
+
+	testFILE.read((char*)&stringHeader,lengthHeader);
+
+	for(unsigned int i=0;i<lengthHeader;i++){
+	    if(magicNumber[i] != stringHeader[i]){
+		isBAMfile=false;
+	    }
+	}       
+	testFILE.close();
+    }else{
+	cerr << "Unable to open file "<<filename<<endl;
+	exit(1);
+    }
+    return isBAMfile;
+}
+
 int main (int argc, char *argv[]) {
 
     string faidx="/mnt/454/Altaiensis/users/gabriel/faidx/index.hg19.fai";
     double alpha=0.8;
-    const string usage=string(string(argv[0])+" [options]  <in BED> <out pdf>"+"\n\n"+
-			      "this program create an ideogram [out pdf] with the [in BED] fil\n"+
+    const string usage=string(string(argv[0])+" [options]  <in BED/BAM> <out pdf>"+"\n\n"+
+			      "this program create an ideogram [out pdf] with the [in BED] file\n"+
 			      "\n"+
 			      "Options:\n"+
 			      "\t"+"--fai" +"\t\t\t"+"samtools faidx for the genome (Default : "+faidx+"\n"+
@@ -205,9 +253,11 @@ int main (int argc, char *argv[]) {
     }
 
     double sizeToUse=HPDF_Page_GetHeight(page)/double(2.0*chrFound.size());
-    map<string, double> name2y;
-    map<string, double > name2length;
-    map<string, double > name2lengthScreen;
+
+    map<string, chrScreenInfo>  name2chrScreenInfo;
+    // map<string, double>  name2y;
+    // map<string, double > name2length;
+    // map<string, double > name2lengthScreen;
     // map<string, double > name2WidthScreen;
 
     double widthScreen= (HPDF_Page_GetWidth(page)-10.0);
@@ -228,10 +278,10 @@ int main (int argc, char *argv[]) {
 		   widthScreen  * (double(chrFound[i].length)/double(maxLengthFound)),     //length
 		   chrFound[i].name.c_str());
 
-	name2y[      chrFound[i].name.c_str() ] = HPDF_Page_GetHeight(page) -sizeToUse*double(i*2);
-	name2length[ chrFound[i].name.c_str() ] = double(chrFound[i].length);
+	name2chrScreenInfo[      chrFound[i].name.c_str() ].y       = HPDF_Page_GetHeight(page) -sizeToUse*double(i*2);
+	name2chrScreenInfo[ chrFound[i].name.c_str() ].length       = double(chrFound[i].length);
 
-	name2lengthScreen[ chrFound[i].name.c_str() ] = ( (HPDF_Page_GetWidth(page)-10.0)  * (double(chrFound[i].length)/double(maxLengthFound)) );     //length
+	name2chrScreenInfo[ chrFound[i].name.c_str() ].lengthScreen = ( (HPDF_Page_GetWidth(page)-10.0)  * (double(chrFound[i].length)/double(maxLengthFound)) );     //length
 	// cout<<chrFound[i].name.c_str()  <<"\t"<<name2lengthScreen[ chrFound[i].name.c_str() ]<<endl;
 	//	name2WidthScreen[ chrFound[i].name.c_str() ] =   widthScreen  * (double(chrFound[i].length)/double(maxLengthFound));
 	HPDF_Page_Stroke (page);
@@ -245,34 +295,59 @@ int main (int argc, char *argv[]) {
 
     HPDF_Page_SetRGBStroke (page, 0.75, 0, 0);
     HPDF_Page_SetRGBFill (page, 0.75, 0.0, 0.0);
-    //HPDF_Page_SetAlphaFill (page, 0.75);
+
+
+
+    bool isBAMfile=isBAM(bedFile);
+
     igzstream myBEDFile;
-    myBEDFile.open(bedFile.c_str(), ios::in);
+
+    if(!isBAMfile){
+	myBEDFile.open(bedFile.c_str(), ios::in);
 
 
-    
-    if (myBEDFile.good()){
-	while ( getline (myBEDFile,line)){
-	    chrinfo toadd;
-	    vector<string> fields = allTokens(line,'\t');
-	    double begin=destringify<double>(fields[1]);
-	    double end  =destringify<double>(fields[2]);
-
-	    draw_Simplerect (page, 
-			     10+ name2lengthScreen[ fields[0] ]*(begin/name2length[ fields[0] ] ),
-			     name2y[fields[0] ],
-			     name2lengthScreen[ fields[0] ] * ((end-begin)/name2length[ fields[0] ]) );
-			     
-	    // cout<<line<<endl;
-	    HPDF_Page_Fill (page);
-
+	if (myBEDFile.good()){
+	    while ( getline (myBEDFile,line)){
+		//cout<<line<<endl;
+		chrinfo toadd;
+		vector<string> fields = allTokens(line,'\t');
+		double begin=destringify<double>(fields[1]);
+		double end  =destringify<double>(fields[2]);
+		if(name2chrScreenInfo.find( fields[0] ) != name2chrScreenInfo.end())
+		addRange(page,begin,end,name2chrScreenInfo[fields[0]] );
+	    }
+	    myBEDFile.close();
+	}else{
+	    cerr << "Unable to open file "<<bedFile<<endl;
+	    return 1;
 	}
-	myBEDFile.close();
     }else{
-	cerr << "Unable to open file "<<bedFile<<endl;
-	return 1;
-    }
+	BamReader reader;
+	if ( !reader.Open(bedFile) ) {
+	    cerr << "Could not open input BAM files." << endl;
+	    return 1;
+	}
+	vector<RefData>  refData=reader.GetReferenceData();
 
+
+	BamAlignment al;
+
+	while ( reader.GetNextAlignment(al) ) {
+	    // cout<<al.Name<<endl;
+	    if(!al.IsMapped())
+		continue;	   
+	    // cout<<refData[al.RefID].RefName<<"\t"<<double(al.Position)<<endl;
+	    if(name2chrScreenInfo.find( refData[al.RefID].RefName ) != name2chrScreenInfo.end())
+		addRange(page,
+			 double(al.Position),
+			 double(al.Position+al.AlignedBases.size()),
+			 name2chrScreenInfo[ refData[al.RefID].RefName ] );
+
+	} //while al
+	
+	reader.Close();
+	
+    }
 
 
     /* save the document to a file */

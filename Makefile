@@ -1,9 +1,10 @@
 
 CXX      = g++   
 LIBGAB   = /home/gabriel_renaud/lib/
+BAMTOOLS= /mnt/solexa/bin/bamtools-2.2.2/
 
-CXXFLAGS = -Wall -lm -O3 -lz -I${LIBGAB} -I${LIBGAB}/VCFparser/gzstream/ -I${LIBGAB}/VCFparser/gzstream/ -I/home/gabriel_renaud/Software/libharu/build/include/ -I/home/gabriel_renaud/Software/libharu/include/ -c
-LDFLAGS  = -lz
+CXXFLAGS = -Wall -lm -O3 -lz -I${LIBGAB} -I${BAMTOOLS}/include/ -I${LIBGAB}/VCFparser/gzstream/ -I${LIBGAB}/VCFparser/gzstream/ -I/home/gabriel_renaud/Software/libharu/build/include/ -I/home/gabriel_renaud/Software/libharu/include/ -c
+LDFLAGS  = ${BAMTOOLS}/lib/libbamtools.a -lz
 
 
 all: bedBamAndBeyond 
