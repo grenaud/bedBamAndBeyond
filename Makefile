@@ -1,5 +1,5 @@
 
-CXX      = g++   
+CXX      = g++ 
 LIBGAB   = /home/gabriel_renaud/lib/
 BAMTOOLS= /mnt/solexa/bin/bamtools-2.2.2/
 

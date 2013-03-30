@@ -98,6 +98,21 @@ inline void addRange(HPDF_Page & page,double begin,double end, const chrScreenIn
     HPDF_Page_Fill (page);
 }
 
+inline void addRangeCov(HPDF_Page & page,double begin,double end, const chrScreenInfo & chrInfToUse, double covFrac ){
+    // cout<<"1 "<<(covFrac)<<endl;
+    // cout<<"2 " <<(1.0-covFrac)<<endl;
+    //    covFrac=double(rand())/double(RAND_MAX);
+    HPDF_Page_SetRGBStroke (page, 1.00, 1.0-covFrac,  1.0-covFrac);
+    HPDF_Page_SetRGBFill   (page, 1.00, 1.0-covFrac,  1.0-covFrac);
+
+    draw_Simplerect (page, 
+		     10+ chrInfToUse.lengthScreen*(begin/chrInfToUse.length ),
+		     chrInfToUse.y,
+		     chrInfToUse.lengthScreen * ((end-begin)/chrInfToUse.length) );			     
+    // cout<<line<<endl;
+    HPDF_Page_Fill (page);
+}
+
 bool isBAM(string filename){
     bool isBAMfile=true;
     //HPDF_Page_SetAlphaFill (page, 0.75);
@@ -128,12 +143,21 @@ int main (int argc, char *argv[]) {
 
     string faidx="/mnt/454/Altaiensis/users/gabriel/faidx/index.hg19.fai";
     double alpha=0.8;
+    int genomicWindow=1000000;
+    double topCoverage  =50.0;
+    bool coverage=false;
+
     const string usage=string(string(argv[0])+" [options]  <in BED/BAM> <out pdf>"+"\n\n"+
 			      "this program create an ideogram [out pdf] with the [in BED] file\n"+
 			      "\n"+
 			      "Options:\n"+
-			      "\t"+"--fai" +"\t\t\t"+"samtools faidx for the genome (Default : "+faidx+"\n"+
-			      "\t"+"--alpha" +"\t\t\t"+"Alpha parameter for bed chunks (Default : "+stringify(alpha)+"\n");
+			      "\t"+"--cov" +"\t\t\t"+"Plot coverage up to "+stringify(topCoverage)+" with windows "+stringify(genomicWindow)+"\n"+
+			      "\tOptions for this mode:\n"+
+			      "\t\t"+"--win" +"\t[size]\t\t"+"Use this size instead of "+stringify(genomicWindow)+"\n"+
+			      "\t\t"+"--top" +"\t[coverage]\t"+"Use this as top coverage instead of "+stringify(topCoverage)+"\n"+
+			      
+			      "\t"+"--fai" +"\t[fai file]\t\t"+"samtools faidx for the genome (Default : "+faidx+")\n"+
+			      "\t"+"--alpha" +"\t[alpha]\t\t"+"Alpha parameter for bed chunks (Default : "+stringify(alpha)+")\n");
 			      
 
      if( (argc== 1) ||
@@ -145,6 +169,23 @@ int main (int argc, char *argv[]) {
     }
 
     for(int i=1;i<(argc-2);i++){ //all but the last two arg
+
+    	if( (string(argv[i]) == "--cov") ){
+	    coverage=true;
+    	    continue;
+    	}
+
+    	if( (string(argv[i]) == "--win") ){
+    	    genomicWindow=destringify<int>(argv[i+1]);
+	    i++;
+    	    continue;
+    	}
+
+    	if( (string(argv[i]) == "--top") ){
+    	    topCoverage=destringify<double>(argv[i+1]);
+	    i++;
+    	    continue;
+    	}
 
     	if( (string(argv[i]) == "--faidx") ){
     	    faidx=string(argv[i+1]);
@@ -293,13 +334,17 @@ int main (int argc, char *argv[]) {
     HPDF_ExtGState_SetAlphaFill (gstate, alpha);
     HPDF_Page_SetExtGState (page, gstate);
 
-    HPDF_Page_SetRGBStroke (page, 0.75, 0, 0);
-    HPDF_Page_SetRGBFill (page, 0.75, 0.0, 0.0);
+    HPDF_Page_SetRGBStroke (page, 0.75, 0.0, 0.0);
+    HPDF_Page_SetRGBFill   (page, 0.75, 0.0, 0.0);
 
 
 
     bool isBAMfile=isBAM(bedFile);
-
+    if(coverage && !isBAMfile){
+	cerr<<"Cannot specify coverage and not a BAM file as input"<<endl;
+	return 1;
+    }
+    
     igzstream myBEDFile;
 
     if(!isBAMfile){
@@ -322,31 +367,91 @@ int main (int argc, char *argv[]) {
 	    return 1;
 	}
     }else{
-	BamReader reader;
-	if ( !reader.Open(bedFile) ) {
-	    cerr << "Could not open input BAM files." << endl;
-	    return 1;
-	}
-	vector<RefData>  refData=reader.GetReferenceData();
+	if(!coverage){
+	    BamReader reader;
+	    if ( !reader.Open(bedFile) ) {
+		cerr << "Could not open input BAM files." << endl;
+		return 1;
+	    }
+	    vector<RefData>  refData=reader.GetReferenceData();
 
 
-	BamAlignment al;
+	    BamAlignment al;
 
-	while ( reader.GetNextAlignment(al) ) {
-	    // cout<<al.Name<<endl;
-	    if(!al.IsMapped())
-		continue;	   
-	    // cout<<refData[al.RefID].RefName<<"\t"<<double(al.Position)<<endl;
-	    if(name2chrScreenInfo.find( refData[al.RefID].RefName ) != name2chrScreenInfo.end())
-		addRange(page,
-			 double(al.Position),
-			 double(al.Position+al.AlignedBases.size()),
-			 name2chrScreenInfo[ refData[al.RefID].RefName ] );
+	    while ( reader.GetNextAlignment(al) ) {
+		// cout<<al.Name<<endl;
+		if(!al.IsMapped())
+		    continue;	   
+		// cout<<refData[al.RefID].RefName<<"\t"<<double(al.Position)<<endl;
+		if(name2chrScreenInfo.find( refData[al.RefID].RefName ) != name2chrScreenInfo.end())
+		    addRange(page,
+			     double(al.Position),
+			     double(al.Position+al.AlignedBases.size()),
+			     name2chrScreenInfo[ refData[al.RefID].RefName ] );
 
-	} //while al
+	    } //while al
 	
-	reader.Close();
-	
+	    reader.Close();
+	}else{
+	    BamReader reader;
+	    if ( !reader.Open(bedFile) ) {
+		cerr << "Could not open input BAM files." << endl;
+		return 1;
+	    }
+	    vector<RefData>  refData=reader.GetReferenceData();
+	    if ( !reader.LocateIndex()  ) {
+		cerr << "The index for the BAM file cannot be located" << endl;
+		return 1;
+	    }
+	    
+	    if ( !reader.HasIndex()  ) {
+		cerr << "The BAM file has not been indexed." << endl;
+		return 1;
+	    }
+
+
+	    for( map<string ,chrScreenInfo>::iterator it = name2chrScreenInfo.begin(); it != name2chrScreenInfo.end(); ++it) {
+		cerr << "Processing chr : "<<it->first << "\n";
+		int refid=reader.GetReferenceID(it->first);
+		chrScreenInfo tempCInf= name2chrScreenInfo[ it->first ];
+
+		for(unsigned int coordinate=1;
+		    (coordinate+genomicWindow)<it->second.length;
+		    coordinate+=genomicWindow){
+		    //cout<<it->first<<"\t"<<coordinate<<endl;
+		    reader.SetRegion(refid,
+				     coordinate,
+				     refid,
+				     coordinate+genomicWindow); 
+		    
+		    BamAlignment al;
+		    unsigned int totalBases=0;
+		    while ( reader.GetNextAlignment(al) ) {
+			//cout<<al.Name<<endl;
+			if(!al.IsMapped())
+			    continue;	   
+			// cout<<refData[al.RefID].RefName<<"\t"<<double(al.Position)<<endl;
+			totalBases+=al.AlignedBases.size();			
+		    } //while al
+		    //cout<<double(totalBases)/double(genomicWindow)<<endl;
+		    double cover=min(topCoverage,double(totalBases)/double(genomicWindow));
+		    //cout<<"c1 "<<cover<<endl;
+		    cover=cover/topCoverage;
+		    //cout<<"c2 "<<cover<<endl;
+		    addRangeCov(page,
+				double(coordinate),
+				double(coordinate+genomicWindow),
+				tempCInf,
+				cover);
+
+		    
+		}
+
+	    }
+
+
+	    
+	}	
     }
 
 
