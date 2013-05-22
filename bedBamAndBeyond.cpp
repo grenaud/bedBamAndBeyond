@@ -83,6 +83,8 @@ typedef struct{
     unsigned int length;
 } chrinfo;
 
+
+//position on the screen
 typedef struct{
     double  y;
     double  length;
@@ -146,17 +148,28 @@ int main (int argc, char *argv[]) {
     int genomicWindow=1000000;
     double topCoverage  =50.0;
     bool coverage=false;
+    bool oneChr=false;
+    string oneChrName="";
+    bool userSetBED=false;
+    bool userSetBAM=false;
 
     const string usage=string(string(argv[0])+" [options]  <in BED/BAM> <out pdf>"+"\n\n"+
 			      "this program create an ideogram [out pdf] with the [in BED] file\n"+
+			      "If you used automatic format detection, (not specifying --bed or --bam), do not use file descriptors\n"+
+			      "For the bed file, you can enter a weight for that range as a 4th field\n"+
 			      "\n"+
 			      "Options:\n"+
-			      "\t"+"--cov" +"\t\t\t"+"Plot coverage up to "+stringify(topCoverage)+" with windows "+stringify(genomicWindow)+"\n"+
+			      "\t"+"--bed" +"\t\t\t"+"Disable automatic format detection, input is bed (Default: "+booleanAsString(userSetBED)+")\n"+		
+			      "\t"+"--bam" +"\t\t\t"+"Disable automatic format detection, input is BAM (Default: "+booleanAsString(userSetBAM)+")\n"+		
+
+			      "\t"+"--cov" +"\t\t\t"+"Plot coverage up to "+stringify(topCoverage)+" with windows "+stringify(genomicWindow)+"\n"+		
 			      "\tOptions for this mode:\n"+
 			      "\t\t"+"--win" +"\t[size]\t\t"+"Use this size instead of "+stringify(genomicWindow)+"\n"+
 			      "\t\t"+"--top" +"\t[coverage]\t"+"Use this as top coverage instead of "+stringify(topCoverage)+"\n"+
 			      
 			      "\t"+"--fai" +"\t[fai file]\t\t"+"samtools faidx for the genome (Default : "+faidx+")\n"+
+			      "\t"+"--chr" +"\t[chr name]\t\t"+"Just plot this chromsome, must be in the fai file (Default : all)\n"+
+
 			      "\t"+"--alpha" +"\t[alpha]\t\t"+"Alpha parameter for bed chunks (Default : "+stringify(alpha)+")\n");
 			      
 
@@ -170,8 +183,25 @@ int main (int argc, char *argv[]) {
 
     for(int i=1;i<(argc-2);i++){ //all but the last two arg
 
+    	if( (string(argv[i]) == "--chr") ){
+	    oneChr    = true;
+	    oneChrName= string(argv[i+1]);
+	    i++;
+    	    continue;
+    	}
+
     	if( (string(argv[i]) == "--cov") ){
 	    coverage=true;
+    	    continue;
+    	}
+
+    	if( (string(argv[i]) == "--bed") ){
+	    userSetBED=true;
+    	    continue;
+    	}
+
+    	if( (string(argv[i]) == "--bam") ){
+	    userSetBAM=true;
     	    continue;
     	}
 
@@ -207,9 +237,12 @@ int main (int argc, char *argv[]) {
     if(alpha<0.0 ||  alpha>1.0){
     	cerr<<"alpha must be between 0 and 1, exiting"<<endl;
     	return 1;
-
     }
 
+    if(userSetBAM && userSetBED){
+    	cerr<<"Cannot set both --bed and --bam, exiting"<<endl;
+    	return 1;
+    }
 
     string bedFile    = string(argv[argc-2]);
     string fname      = string(argv[argc-1]);
@@ -293,40 +326,51 @@ int main (int argc, char *argv[]) {
 	return 1;
     }
 
+
+    bool found=false;
+    if(oneChr){
+	for(unsigned int i=0;
+	    i<chrFound.size();
+	    i++){
+	    if(chrFound[i].name == oneChrName){
+		found=true;
+		maxLengthFound=chrFound[i].length;
+	    }
+	}
+
+	if(!found){
+	    cerr<<"Chromosome you entered "<<oneChrName<<" was not found"<<endl;
+	    return 1;
+	}
+    }
+
     double sizeToUse=HPDF_Page_GetHeight(page)/double(2.0*chrFound.size());
 
     map<string, chrScreenInfo>  name2chrScreenInfo;
-    // map<string, double>  name2y;
-    // map<string, double > name2length;
-    // map<string, double > name2lengthScreen;
-    // map<string, double > name2WidthScreen;
 
     double widthScreen= (HPDF_Page_GetWidth(page)-10.0);
     for(unsigned int i=0;
 	i<chrFound.size();
 	i++){
-	//cout<<<<endl;
-	  //                x  y   title
-	//draw_rect (page, HPDF_Page_GetWidth(page) -10.0*double(i) , 100, chrFound[i].name.c_str());
-	// draw_Simplerect (page, 
-	// 		 10 , //x
-	// 		 HPDF_Page_GetHeight(page) -sizeToUse*double(i*2), //y
-	// 		 (HPDF_Page_GetWidth(page)-10.0)  * (double(chrFound[i].length)/double(maxLengthFound)));    //length
 
+	double yOffset=sizeToUse*double(i*2);
+	if(oneChr){
+	    if(chrFound[i].name != oneChrName)
+		continue;
+	    yOffset=0;
+	}
+	
 	draw_rect (page, 
 		   10 , //x
-		   HPDF_Page_GetHeight(page) -sizeToUse*double(i*2), //y
+		   HPDF_Page_GetHeight(page) - yOffset, //y
 		   widthScreen  * (double(chrFound[i].length)/double(maxLengthFound)),     //length
 		   chrFound[i].name.c_str());
 
-	name2chrScreenInfo[      chrFound[i].name.c_str() ].y       = HPDF_Page_GetHeight(page) -sizeToUse*double(i*2);
-	name2chrScreenInfo[ chrFound[i].name.c_str() ].length       = double(chrFound[i].length);
+	name2chrScreenInfo[ chrFound[i].name.c_str() ].y            = HPDF_Page_GetHeight(page) -yOffset; //y offset
+	name2chrScreenInfo[ chrFound[i].name.c_str() ].length       = double(chrFound[i].length);   //length
 
-	name2chrScreenInfo[ chrFound[i].name.c_str() ].lengthScreen = ( (HPDF_Page_GetWidth(page)-10.0)  * (double(chrFound[i].length)/double(maxLengthFound)) );     //length
-	// cout<<chrFound[i].name.c_str()  <<"\t"<<name2lengthScreen[ chrFound[i].name.c_str() ]<<endl;
-	//	name2WidthScreen[ chrFound[i].name.c_str() ] =   widthScreen  * (double(chrFound[i].length)/double(maxLengthFound));
+	name2chrScreenInfo[ chrFound[i].name.c_str() ].lengthScreen = ( (HPDF_Page_GetWidth(page)-10.0)  * (double(chrFound[i].length)/double(maxLengthFound)) );     //length on screen
 	HPDF_Page_Stroke (page);
-
     }
 
     HPDF_Page_GSave (page);
@@ -339,12 +383,17 @@ int main (int argc, char *argv[]) {
 
 
 
-    bool isBAMfile=isBAM(bedFile);
-    if(coverage && !isBAMfile){
-	cerr<<"Cannot specify coverage and not a BAM file as input"<<endl;
-	return 1;
+    bool isBAMfile=false;
+    if(userSetBED || userSetBAM){
+	isBAMfile=userSetBAM;
+    }else{
+	isBAMfile=isBAM(bedFile);
+	if(coverage && !isBAMfile){
+	    cerr<<"Cannot specify coverage and not a BAM file as input"<<endl;
+	    return 1;
+	}
     }
-    
+
     igzstream myBEDFile;
 
     if(!isBAMfile){
@@ -358,8 +407,20 @@ int main (int argc, char *argv[]) {
 		vector<string> fields = allTokens(line,'\t');
 		double begin=destringify<double>(fields[1]);
 		double end  =destringify<double>(fields[2]);
-		if(name2chrScreenInfo.find( fields[0] ) != name2chrScreenInfo.end())
-		addRange(page,begin,end,name2chrScreenInfo[fields[0]] );
+		
+		if(name2chrScreenInfo.find( fields[0] ) != name2chrScreenInfo.end()){
+		    if(fields.size() == 4){
+			double factor  =destringify<double>(fields[3]);
+			addRangeCov(page,
+				    begin,
+				    end,
+				    name2chrScreenInfo[fields[0]],
+				    factor);
+		    }else{
+			addRange(page,begin,end,name2chrScreenInfo[fields[0]] );
+		    }
+
+		}
 	    }
 	    myBEDFile.close();
 	}else{
@@ -411,6 +472,12 @@ int main (int argc, char *argv[]) {
 
 
 	    for( map<string ,chrScreenInfo>::iterator it = name2chrScreenInfo.begin(); it != name2chrScreenInfo.end(); ++it) {
+		//if one chr, skip others
+		if(oneChr){
+		    if(it->first != oneChrName)
+			continue;
+		}
+
 		cerr << "Processing chr : "<<it->first << "\n";
 		int refid=reader.GetReferenceID(it->first);
 		chrScreenInfo tempCInf= name2chrScreenInfo[ it->first ];
@@ -418,7 +485,7 @@ int main (int argc, char *argv[]) {
 		for(unsigned int coordinate=1;
 		    (coordinate+genomicWindow)<it->second.length;
 		    coordinate+=genomicWindow){
-		    //cout<<it->first<<"\t"<<coordinate<<endl;
+
 		    reader.SetRegion(refid,
 				     coordinate,
 				     refid,
