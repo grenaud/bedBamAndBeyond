@@ -387,7 +387,7 @@ int main (int argc, char *argv[]) {
 
 
 
-     for(int indexofinputF=1;indexofinputF<=3;indexofinputF++){
+     for(int indexofinputF=1;(indexOflastOpt+indexofinputF)<argc;indexofinputF++){
 	 string bedFile    = string(argv[indexOflastOpt+indexofinputF]);
 
 	 if(indexofinputF==1){
@@ -433,6 +433,10 @@ int main (int argc, char *argv[]) {
 		     if(name2chrScreenInfo.find( fields[0] ) != name2chrScreenInfo.end()){
 			 if(fields.size() == 4){
 			     double factor  =destringify<double>(fields[3]);
+			     if(factor>1 ||  factor<0){
+				 cerr<<"ERROR: alpha factor must be between 0 and 1"<<factor<<endl;
+				 return 1;
+			     }
 			     addRangeCov(page,
 					 begin,
 					 end,
