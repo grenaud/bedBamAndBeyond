@@ -13,7 +13,7 @@ bedBamAndBeyond.o:	bedBamAndBeyond.cpp
 	${CXX} ${CXXFLAGS} bedBamAndBeyond.cpp
 
 
-bedBamAndBeyond:	bedBamAndBeyond.o ${LIBGAB}utils.o  ${LIBGAB}VCFparser/gzstream/libgzstream.a /home/gabriel_renaud/Software/libharu/build/src/libhpdf.so
+bedBamAndBeyond:	bedBamAndBeyond.o ${LIBGAB}utils.o  ${LIBGAB}VCFparser/gzstream/libgzstream.a /home/gabriel_renaud/Software/libharu/build/src/libhpdfs.a
 	${CXX} -o $@ $^ $(LDLIBS) $(LDFLAGS)
 
 clean :

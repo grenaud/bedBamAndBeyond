@@ -10,7 +10,7 @@
 #include <fstream>
 #include <gzstream.h>
 #include <setjmp.h>
-
+#include <algorithm>    // std::
 #include "api/BamMultiReader.h"
 #include "api/BamReader.h"
 #include "api/BamWriter.h"
@@ -100,12 +100,26 @@ inline void addRange(HPDF_Page & page,double begin,double end, const chrScreenIn
     HPDF_Page_Fill (page);
 }
 
-inline void addRangeCov(HPDF_Page & page,double begin,double end, const chrScreenInfo & chrInfToUse, double covFrac ){
+inline void addRangeCov(HPDF_Page & page,double begin,double end, const chrScreenInfo & chrInfToUse, double covFrac , int indexofinputF){
     // cout<<"1 "<<(covFrac)<<endl;
     // cout<<"2 " <<(1.0-covFrac)<<endl;
     //    covFrac=double(rand())/double(RAND_MAX);
-    HPDF_Page_SetRGBStroke (page, 1.00, 1.0-covFrac,  1.0-covFrac);
-    HPDF_Page_SetRGBFill   (page, 1.00, 1.0-covFrac,  1.0-covFrac);
+
+
+
+    if(indexofinputF==1){
+	HPDF_Page_SetRGBStroke (page, 1.00,        1.0-covFrac,  1.0-covFrac);
+	HPDF_Page_SetRGBFill   (page, 1.00,        1.0-covFrac,  1.0-covFrac);
+    }else if(indexofinputF==2){
+	HPDF_Page_SetRGBStroke (page, 1.0-covFrac, 1.00,         1.0-covFrac);
+	HPDF_Page_SetRGBFill   (page, 1.0-covFrac, 1.00,         1.0-covFrac);
+    }else if(indexofinputF==3){
+	HPDF_Page_SetRGBStroke (page, 1.0-covFrac, 1.0-covFrac,  1.00);
+	HPDF_Page_SetRGBFill   (page, 1.0-covFrac, 1.0-covFrac,  1.00);
+    }else{
+	cerr<<"Color not defined for this file"<<endl;
+	exit(1);
+    }
 
     draw_Simplerect (page, 
 		     10+ chrInfToUse.lengthScreen*(begin/chrInfToUse.length ),
@@ -152,7 +166,7 @@ int main (int argc, char *argv[]) {
     string oneChrName="";
     bool userSetBED=false;
     bool userSetBAM=false;
-
+    bool verbose=false;
     const string usage=string(string(argv[0])+" [options] <out pdf>  <in BED/BAM red> [in BED/BAM green] [in BED/BAM blue] "+"\n\n"+
 			      "this program create an ideogram [out pdf] with the [in BED] file\n"+
 			      "If you used automatic format detection, (not specifying --bed or --bam), do not use file descriptors\n"+
@@ -164,7 +178,9 @@ int main (int argc, char *argv[]) {
 
 			      "\t"+"--cov" +"\t\t\t"+"Plot coverage up to "+stringify(topCoverage)+" with windows "+stringify(genomicWindow)+"\n"+		
 			      "\tOptions for this mode:\n"+
+			      "\t\t"+"--verbose" +"\t\t\t\t"+"Verbose mode where the coverage will be printed to stdout\n"+
 			      "\t\t"+"--win" +"\t[size]\t\t"+"Use this size instead of "+stringify(genomicWindow)+"\n"+
+
 			      "\t\t"+"--top" +"\t[coverage]\t"+"Use this as top coverage instead of "+stringify(topCoverage)+"\n"+
 			      
 			      "\t"+"--fai" +"\t[fai file]\t\t"+"samtools faidx for the genome (Default : "+faidx+")\n"+
@@ -193,6 +209,11 @@ int main (int argc, char *argv[]) {
 	     oneChr    = true;
 	     oneChrName= string(argv[i+1]);
 	     i++;
+	     continue;
+	 }
+
+	 if( (string(argv[i]) == "--verbose") ){
+	     verbose=true;
 	     continue;
 	 }
 
@@ -389,6 +410,7 @@ int main (int argc, char *argv[]) {
 
      for(int indexofinputF=1;(indexOflastOpt+indexofinputF)<argc;indexofinputF++){
 	 string bedFile    = string(argv[indexOflastOpt+indexofinputF]);
+	 
 
 	 if(indexofinputF==1){
 	     HPDF_Page_SetRGBStroke (page, 0.75,  0.0,    0.0);
@@ -397,8 +419,8 @@ int main (int argc, char *argv[]) {
 	     HPDF_Page_SetRGBStroke (page, 0.0,  0.75,    0.0);
 	     HPDF_Page_SetRGBFill   (page, 0.0,  0.75,    0.0);
 	 }else if(indexofinputF==3){
-	     HPDF_Page_SetRGBStroke (page, 0.0,   0.0,  0.75 );
-	     HPDF_Page_SetRGBFill   (page, 0.0,   0.0,  0.75 );
+	     HPDF_Page_SetRGBStroke (page, 0.0,   0.0,   0.75);
+	     HPDF_Page_SetRGBFill   (page, 0.0,   0.0,   0.75);
 	 }else{
 	     cerr<<"Color not defined for this file"<<endl;
 	     return 1;
@@ -432,7 +454,7 @@ int main (int argc, char *argv[]) {
 		
 		     if(name2chrScreenInfo.find( fields[0] ) != name2chrScreenInfo.end()){
 			 if(fields.size() == 4){
-			     double factor  =destringify<double>(fields[3]);
+			     double factor = destringify<double>(fields[3]);
 			     if(factor>1 ||  factor<0){
 				 cerr<<"ERROR: alpha factor must be between 0 and 1"<<factor<<endl;
 				 return 1;
@@ -441,7 +463,7 @@ int main (int argc, char *argv[]) {
 					 begin,
 					 end,
 					 name2chrScreenInfo[fields[0]],
-					 factor);
+					 factor, indexofinputF);
 			 }else{
 			     addRange(page,begin,end,name2chrScreenInfo[fields[0]] );
 			 }
@@ -454,6 +476,7 @@ int main (int argc, char *argv[]) {
 		 return 1;
 	     }
 	 }else{
+	     
 	     if(!coverage){
 		 BamReader reader;
 		 if ( !reader.Open(bedFile) ) {
@@ -479,7 +502,7 @@ int main (int argc, char *argv[]) {
 		 } //while al
 	
 		 reader.Close();
-	     }else{
+	     }else{ //coverage
 		 BamReader reader;
 		 if ( !reader.Open(bedFile) ) {
 		     cerr << "Could not open input BAM files." << endl;
@@ -523,11 +546,14 @@ int main (int argc, char *argv[]) {
 			     //cout<<al.Name<<endl;
 			     if(!al.IsMapped())
 				 continue;	   
-			     // cout<<refData[al.RefID].RefName<<"\t"<<double(al.Position)<<endl;
+			     // 
 			     totalBases+=al.AlignedBases.size();			
 			 } //while al
 			 //cout<<double(totalBases)/double(genomicWindow)<<endl;
+
 			 double cover=min(topCoverage,double(totalBases)/double(genomicWindow));
+			 if(verbose)
+			     cout<<refData[refid].RefName<<"\t"<<coordinate<<"\t"<<(coordinate+genomicWindow)<<"\t"<<totalBases<<endl;
 			 //cout<<"c1 "<<cover<<endl;
 			 cover=cover/topCoverage;
 			 //cout<<"c2 "<<cover<<endl;
@@ -535,7 +561,7 @@ int main (int argc, char *argv[]) {
 				     double(coordinate),
 				     double(coordinate+genomicWindow),
 				     tempCInf,
-				     cover);
+				     cover, indexofinputF);
 
 		    
 		     }
