@@ -18,7 +18,7 @@ libgab/utils.h:
 	git clone --recursive https://github.com/grenaud/libgab.git
 
 libgab/utils.o:  libgab/utils.h
-	make -C libgab
+	cd libgab/ &&  make utils.o && make -C gzstream/ && cd ../
 
 bamtools/src/api/BamAlignment.h:
 	rm -rf bamtools/
@@ -37,7 +37,7 @@ libharu/include/hpdf.h:
 libharu/src/.libs/libhpdf.a: libharu/include/hpdf.h
 	cd libharu/ && ./buildconf.sh && ./configure && make
 
-bedBamAndBeyond.o:	bedBamAndBeyond.cpp libharu/src/.libs/libhpdf.a libgab/utils.o  libgab/gzstream/libgzstream.a
+bedBamAndBeyond.o:	bedBamAndBeyond.cpp libharu/src/.libs/libhpdf.a libgab/utils.o  libgab/gzstream/libgzstream.a bamtools/build/src/api/libbamtools.a
 	${CXX} ${CXXFLAGS} bedBamAndBeyond.cpp
 
 
