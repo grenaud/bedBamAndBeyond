@@ -13,12 +13,12 @@ LDFLAGS  =    -lm  -lz
 all: bedBamAndBeyond 
 
 
-libgab/utils.h:
+libgab/libgab.h:
 	rm -rf libgab/
 	git clone --recursive https://github.com/grenaud/libgab.git
 
-libgab/utils.o:  libgab/utils.h
-	cd libgab/ &&  make utils.o && make -C gzstream/ && cd ../
+libgab/libgab.a:  libgab/libgab.h
+	cd libgab/ &&  make libgab.a && make -C gzstream/ && cd ../
 
 bamtools/src/api/BamAlignment.h:
 	rm -rf bamtools/
@@ -37,11 +37,11 @@ libharu/include/hpdf.h:
 libharu/src/.libs/libhpdf.a: libharu/include/hpdf.h
 	cd libharu/ && ./buildconf.sh && ./configure && make
 
-bedBamAndBeyond.o:	bedBamAndBeyond.cpp libharu/src/.libs/libhpdf.a libgab/utils.o  libgab/gzstream/libgzstream.a bamtools/build/src/api/libbamtools.a
+bedBamAndBeyond.o:	bedBamAndBeyond.cpp libharu/src/.libs/libhpdf.a libgab/libgab.a  libgab/gzstream/libgzstream.a bamtools/build/src/api/libbamtools.a
 	${CXX} ${CXXFLAGS} bedBamAndBeyond.cpp
 
 
-bedBamAndBeyond:	bedBamAndBeyond.o libgab/utils.o  libharu/src/.libs/libhpdf.a libgab/utils.o libgab/gzstream/libgzstream.a bamtools/build/src/api/libbamtools.a
+bedBamAndBeyond:	bedBamAndBeyond.o libgab/libgab.a  libharu/src/.libs/libhpdf.a libgab/libgab.a libgab/gzstream/libgzstream.a bamtools/build/src/api/libbamtools.a
 	${CXX} -o $@ $^ $(LDLIBS) $(LDFLAGS)
 
 clean :
